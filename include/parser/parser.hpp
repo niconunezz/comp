@@ -10,7 +10,8 @@ enum tokens {
     tok_def = -2,
     tok_extern = -3,
     tok_identifier = -4,
-    tok_number = -5
+    tok_number = -5,
+
 };
 
 
@@ -30,6 +31,9 @@ static int getTok() {
         
         if (IdentifierStr == "def") 
         return tok_def;
+
+        if (IdentifierStr == "extern") 
+        return tok_extern;
         
         return tok_identifier;
     }
@@ -178,7 +182,6 @@ std::unique_ptr<ExprAST> ParseExprRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS
         int BinOp = CurTok;
         getNextToken(); // eat binOp
         auto RHS = ParsePrimary();
-
         if (!RHS) {
             return nullptr;
         }
@@ -190,12 +193,12 @@ std::unique_ptr<ExprAST> ParseExprRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS
                 return nullptr;
             }
         }
-
+        
         LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
     }
 }
 
-std::unique_ptr<ExprAST> ParseExpression() {
+static std::unique_ptr<ExprAST> ParseExpression() {
     auto LHS = ParsePrimary();
     if (!LHS) {
         return nullptr;
@@ -206,7 +209,7 @@ std::unique_ptr<ExprAST> ParseExpression() {
 
 
 
-std::unique_ptr<SignatureAST> ParseSignature() {
+static std::unique_ptr<SignatureAST> ParseSignature() {
     if (CurTok != tok_identifier) {
         return LogErrorP("Expecting a function name for the signature");
     }
@@ -231,6 +234,19 @@ std::unique_ptr<SignatureAST> ParseSignature() {
 
     return std::make_unique<SignatureAST>(fnName, std::move(ArgNames));
 
+}
+
+static std::unique_ptr<SignatureAST> ParseExtern() {
+    getNextToken(); // eat extern;
+    return ParseSignature();
+}
+
+static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
+    if (auto E = ParseExpression()) {
+        auto Signature = std::make_unique<SignatureAST>("", std::vector<std::string>());
+        return std::make_unique<FunctionAST>(std::move(Signature), std::move(E));
+    }
+    return nullptr;
 }
 
 static std::unique_ptr<FunctionAST> ParseDefinition() {
