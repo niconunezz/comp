@@ -4,13 +4,7 @@
 #include <string>
 #include <memory>
 #include <vector>
-#include "llvm/IR/Value.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Verifier.h"
+
 
 
 extern std::unique_ptr<llvm::LLVMContext> TheContext;
@@ -58,6 +52,20 @@ public:
     llvm::Value* codegen() override;
 };
 
+class IfExprAST : public ExprAST {
+    std::unique_ptr<ExprAST> Cond, Then, Else;
+public:
+    IfExprAST(std::unique_ptr<ExprAST> Cond, 
+              std::unique_ptr<ExprAST> Then,
+              std::unique_ptr<ExprAST> Else)
+              : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+
+    IfExprAST(std::unique_ptr<ExprAST> Cond, 
+              std::unique_ptr<ExprAST> Then)
+              : Cond(std::move(Cond)), Then(std::move(Then)) {}
+    llvm::Value *codegen() override;
+};
+
 class CallExprAST : public ExprAST {
     std::string Callee;
     std::vector<std::unique_ptr<ExprAST>> Args;
@@ -75,6 +83,10 @@ class SignatureAST {
 public:
     SignatureAST(std::string Name, std::vector<std::string> Args) : Name(Name), Args(std::move(Args)) {}
     const std::string& getName() const { return Name; }
+    const int getArgsSize() const { return Args.size(); }
+    const std::vector<std::string>& getArgs() const { return Args; }
+
+
 
     llvm::Function *codegen();
 };

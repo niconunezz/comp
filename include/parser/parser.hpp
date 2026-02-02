@@ -11,11 +11,14 @@ enum tokens {
     tok_extern = -3,
     tok_identifier = -4,
     tok_number = -5,
+    tok_if = -6,
+    tok_then = -7,
+    tok_else = -8,
 
 };
 
 
-static int NumVal;
+static double NumVal;
 static std::string IdentifierStr;
 
 static int getTok() {
@@ -34,6 +37,15 @@ static int getTok() {
 
         if (IdentifierStr == "extern") 
         return tok_extern;
+
+        if (IdentifierStr == "if") 
+        return tok_if;
+
+        if (IdentifierStr == "then") 
+        return tok_then;
+
+        if (IdentifierStr == "else") 
+        return tok_else;
         
         return tok_identifier;
     }
@@ -144,6 +156,31 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
   return std::make_unique<CallExprAST>(IdName, std::move(Args));
 }
 
+static std::unique_ptr<ExprAST> ParseIfExpr() {
+
+    getNextToken(); // skip if
+    auto Cond = ParseExpression();
+    if (!Cond)
+        return nullptr;
+    
+    if (CurTok != tok_then)
+        return LogError("Expected then after condition");
+    
+    getNextToken(); // skip then
+    auto Then = ParseExpression();
+    if (!Then)
+        return nullptr;
+
+    if (CurTok != tok_else) {
+        return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then));
+    }
+    getNextToken();
+    auto Else = ParseExpression();
+    if (!Else)
+        return nullptr;
+    return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
+}
+
 static std::unique_ptr<ExprAST> parseParenExpr() {
     getNextToken();
     auto V = ParseExpression();
@@ -164,11 +201,12 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
         return LogError("unknown token when expecting an expression");
     case tok_identifier:
         return ParseIdentifierExpr();
-        
     case tok_number:
         return parseNumExpr();
     case '(':
         return parseParenExpr();
+    case tok_if:
+        return ParseIfExpr();
     }
 }
 
@@ -209,6 +247,7 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 
 
 
+
 static std::unique_ptr<SignatureAST> ParseSignature() {
     if (CurTok != tok_identifier) {
         return LogErrorP("Expecting a function name for the signature");
@@ -242,11 +281,13 @@ static std::unique_ptr<SignatureAST> ParseExtern() {
 }
 
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
-    if (auto E = ParseExpression()) {
-        auto Signature = std::make_unique<SignatureAST>("", std::vector<std::string>());
-        return std::make_unique<FunctionAST>(std::move(Signature), std::move(E));
-    }
-    return nullptr;
+  if (auto E = ParseExpression()) {
+    // Make an anonymous proto.
+    auto Proto = std::make_unique<SignatureAST>("__anon_expr",
+                                                 std::vector<std::string>());
+    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+  }
+  return nullptr;
 }
 
 static std::unique_ptr<FunctionAST> ParseDefinition() {
