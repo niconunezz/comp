@@ -14,6 +14,8 @@ enum tokens {
     tok_if = -6,
     tok_then = -7,
     tok_else = -8,
+    tok_for = -9,
+    tok_in = -10
 
 };
 
@@ -46,6 +48,12 @@ static int getTok() {
 
         if (IdentifierStr == "else") 
         return tok_else;
+
+        if (IdentifierStr == "for") 
+        return tok_for;
+
+        if (IdentifierStr == "in") 
+        return tok_in;
         
         return tok_identifier;
     }
@@ -181,6 +189,54 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then), std::move(Else));
 }
 
+static std::unique_ptr<ExprAST> parseForExpr() {
+    getNextToken(); // skip for
+    if (CurTok != tok_identifier)
+       return LogError("Expected Identifier");
+    
+    std::string IdName = IdentifierStr;
+    getNextToken();
+    if (CurTok != '=') {
+        return LogError("Expected =");
+    }
+    getNextToken();
+    
+    if (CurTok != tok_number) {
+        return LogError("Expected number");
+    }
+    auto Start = ParseExpression();
+    if (!Start)
+        return nullptr;
+    
+    if (CurTok != ',')
+        return LogError("Expected , between args");
+    getNextToken();
+
+    auto End = ParseExpression();
+    if (!End)
+        return nullptr;
+
+    std::unique_ptr<ExprAST> Step;
+    if (CurTok == ',')
+        Step = ParseExpression();
+        if (!Step)
+            return nullptr;
+    
+
+    if (CurTok != tok_in)
+        return LogError("expected 'in' after for");
+    
+    getNextToken();
+    auto Body = ParseExpression();
+    if (!Body)
+        return nullptr;
+    
+    return std::make_unique<ForExprAST>(IdName, std::move(Start), 
+                                        std::move(End), std::move(Step),
+                                        std::move(Body));
+}
+
+
 static std::unique_ptr<ExprAST> parseParenExpr() {
     getNextToken();
     auto V = ParseExpression();
@@ -207,6 +263,8 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
         return parseParenExpr();
     case tok_if:
         return ParseIfExpr();
+    case tok_for:
+        return parseForExpr();
     }
 }
 

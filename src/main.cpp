@@ -302,6 +302,10 @@ Value* IfExprAST::codegen() {
 }
 
 
+Value* ForExprAST::codegen() {
+    return Body->codegen();
+}
+
 
 
 static void HandleDefinition() {
