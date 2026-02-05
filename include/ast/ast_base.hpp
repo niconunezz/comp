@@ -75,7 +75,7 @@ public:
             std::unique_ptr<ExprAST> End, 
             std::unique_ptr<ExprAST> Step, 
             std::unique_ptr<ExprAST> Body) :
-            VarName(VarName), (std::move(Start)), End(std::move(End)), Body(std::move(Body)) {}
+            VarName(VarName), Start(std::move(Start)), End(std::move(End)), Body(std::move(Body)) {}
     
     llvm::Value* codegen() override;
 

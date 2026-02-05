@@ -62,6 +62,7 @@ static ExitOnError ExitOnErr;
 
 extern "C" DLLEXPORT double putchard(double X) {
   fputc((char)X, stderr);
+  printf("\n");
   return 0;
 }
 
@@ -116,10 +117,10 @@ void InitializeModuleAndPassManagers(void) {
 
     // 6. Configurar el FunctionPassManager
     TheFPM = std::make_unique<FunctionPassManager>();
-    TheFPM->addPass(InstCombinePass());
-    TheFPM->addPass(ReassociatePass());
-    TheFPM->addPass(GVNPass());
-    TheFPM->addPass(SimplifyCFGPass());
+    // TheFPM->addPass(InstCombinePass());
+    // TheFPM->addPass(ReassociatePass());
+    // TheFPM->addPass(GVNPass());
+    // TheFPM->addPass(SimplifyCFGPass());
 }
 
 
@@ -303,7 +304,58 @@ Value* IfExprAST::codegen() {
 
 
 Value* ForExprAST::codegen() {
-    return Body->codegen();
+    Value* StartVal = Start->codegen();
+    if (!StartVal) 
+        return nullptr;
+    
+
+    Function* TheFunction = Builder->GetInsertBlock()->getParent();
+    BasicBlock* PreHeaderBB = Builder->GetInsertBlock();
+    BasicBlock* LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+
+    Builder->CreateBr(LoopBB);
+    Builder->SetInsertPoint(LoopBB);
+
+    PHINode* Variable = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, VarName);
+    Variable->addIncoming(StartVal, PreHeaderBB);
+
+    Body->codegen();
+
+    Value* OldVal = NamedValues[VarName];
+    NamedValues[VarName] = Variable;
+    
+    Value* StepVal = nullptr;
+    if (Step) {
+        StepVal = Step->codegen();
+        if (!StepVal)
+            return nullptr;
+    } else {
+        StepVal = ConstantFP::get(*TheContext, APFloat(1.0));
+    }
+    
+    Value* NextVar = Builder->CreateFAdd(Variable, StepVal, "nextvar");
+
+    Value* EndCond = End->codegen();
+    if (!EndCond)
+        return nullptr;
+    
+    Value* CondV = Builder->CreateFCmpONE(
+            EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond"
+    );
+
+    BasicBlock* LoopEndBB = Builder->GetInsertBlock();
+    BasicBlock* AfterBB = BasicBlock::Create(*TheContext, "afterloop", TheFunction);
+    Builder->CreateCondBr(CondV, LoopBB, AfterBB);
+    Builder->SetInsertPoint(AfterBB);
+
+    Variable->addIncoming(NextVar, LoopEndBB);
+    if (OldVal)
+        NamedValues[VarName] = OldVal;
+    else
+        NamedValues.erase(VarName);
+
+    return Constant::getNullValue(Type::getDoubleTy(*TheContext));
+
 }
 
 
@@ -348,7 +400,6 @@ static void HandleTopLevel() {
         if (auto FnIr = FnAST->codegen()) {
             auto endCod = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> durationCod = endCod - startCod;
-            fprintf(stderr, "Codegen in %f\n", durationCod.count());
 
             FnIr->print(errs());
             auto startOpt = std::chrono::high_resolution_clock::now();
@@ -396,7 +447,7 @@ static void MainLoop() {
 }
 
 int main(int argc, char **argv) {
-    llvm::DebugFlag = false; // Esto equivale a haber pasado -debug por terminal
+    llvm::DebugFlag = true; // Esto equivale a haber pasado -debug por terminal
 
     std::unique_ptr<LLVMContext> TheContext;
     std::unique_ptr<IRBuilder<>> Builder;

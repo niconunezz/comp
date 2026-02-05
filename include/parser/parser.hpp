@@ -49,8 +49,12 @@ static int getTok() {
         if (IdentifierStr == "else") 
         return tok_else;
 
-        if (IdentifierStr == "for") 
-        return tok_for;
+        if (IdentifierStr == "for") {
+
+            printf("for token identified\n");
+            return tok_for; 
+        }
+
 
         if (IdentifierStr == "in") 
         return tok_in;
@@ -207,6 +211,9 @@ static std::unique_ptr<ExprAST> parseForExpr() {
     auto Start = ParseExpression();
     if (!Start)
         return nullptr;
+
+    fprintf(stderr, "Start parsed correctly\n");
+    
     
     if (CurTok != ',')
         return LogError("Expected , between args");
@@ -215,22 +222,29 @@ static std::unique_ptr<ExprAST> parseForExpr() {
     auto End = ParseExpression();
     if (!End)
         return nullptr;
+    fprintf(stderr, "End parsed correctly\n");
 
     std::unique_ptr<ExprAST> Step;
-    if (CurTok == ',')
+    if (CurTok == ',') {
+        getNextToken();
         Step = ParseExpression();
         if (!Step)
             return nullptr;
+
+    }
     
 
+    fprintf(stderr, "Step parsed correctly\n");
     if (CurTok != tok_in)
         return LogError("expected 'in' after for");
     
+
     getNextToken();
     auto Body = ParseExpression();
     if (!Body)
         return nullptr;
     
+    fprintf(stderr, "Body parsed correctly\n");
     return std::make_unique<ForExprAST>(IdName, std::move(Start), 
                                         std::move(End), std::move(Step),
                                         std::move(Body));
@@ -254,7 +268,8 @@ static std::unique_ptr<ExprAST> parseParenExpr() {
 static std::unique_ptr<ExprAST> ParsePrimary() {
     switch (CurTok) {
     default:
-        return LogError("unknown token when expecting an expression");
+        fprintf(stderr, "Token %d!", CurTok);
+        return LogError(" expecting an expression");
     case tok_identifier:
         return ParseIdentifierExpr();
     case tok_number:
@@ -264,6 +279,7 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
     case tok_if:
         return ParseIfExpr();
     case tok_for:
+        fprintf(stderr, "Parsing for!\n");
         return parseForExpr();
     }
 }
@@ -308,7 +324,8 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 
 static std::unique_ptr<SignatureAST> ParseSignature() {
     if (CurTok != tok_identifier) {
-        return LogErrorP("Expecting a function name for the signature");
+        fprintf(stderr, "Got %d but were ", CurTok);
+        return LogErrorP("expecting a function name for the signature");
     }
     std::string fnName = IdentifierStr;
     getNextToken();
