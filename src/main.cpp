@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -47,7 +48,7 @@ std::unique_ptr<LLVMContext> TheContext;
 std::unique_ptr<IRBuilder<>> Builder;
 std::unique_ptr<Module> TheModule;
 std::map<std::string, Value*> NamedValues;
-
+ 
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
 static std::unique_ptr<FunctionPassManager> TheFPM;
 static std::unique_ptr<LoopAnalysisManager> TheLAM;
@@ -96,7 +97,7 @@ void InitializeModuleAndPassManagers(void) {
 
     // 1. Inicializar Instrumentación PRIMERO
     ThePIC = std::make_unique<PassInstrumentationCallbacks>();
-    TheSI = std::make_unique<StandardInstrumentations>(/*DebugLogging*/ true);
+    TheSI = std::make_unique<StandardInstrumentations>(*TheContext, /*DebugLogging*/ true);
     
     // 2. Inicializar los Managers (especialmente FAM) para poder registrarlo
     TheFAM = std::make_unique<FunctionAnalysisManager>();
@@ -108,7 +109,7 @@ void InitializeModuleAndPassManagers(void) {
     // TheSI->registerCallbacks(*ThePIC, TheFAM.get()); 
 
     // 4. Crear PassBuilder con el PIC ya configurado
-    PassBuilder PB(nullptr, PipelineTuningOptions(), None, ThePIC.get());
+    PassBuilder PB(nullptr, PipelineTuningOptions(), std::nullopt, ThePIC.get());
 
     // 5. Registro normal de análisis
     PB.registerModuleAnalyses(*TheMAM);
@@ -412,7 +413,7 @@ static void HandleTopLevel() {
             InitializeModuleAndPassManagers();
 
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
-            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
+            double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
 
             fprintf(stderr, "Evaluated to %f in %f\n", FP(), duration.count());
             
@@ -447,7 +448,7 @@ static void MainLoop() {
 }
 
 int main(int argc, char **argv) {
-    llvm::DebugFlag = true; // Esto equivale a haber pasado -debug por terminal
+    llvm::DebugFlag = false; // Esto equivale a haber pasado -debug por terminal
 
     std::unique_ptr<LLVMContext> TheContext;
     std::unique_ptr<IRBuilder<>> Builder;

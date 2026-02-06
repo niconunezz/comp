@@ -15,7 +15,9 @@ enum tokens {
     tok_then = -7,
     tok_else = -8,
     tok_for = -9,
-    tok_in = -10
+    tok_in = -10,
+    tok_binary = -11,
+    tok_unary = -12,
 
 };
 
@@ -49,15 +51,17 @@ static int getTok() {
         if (IdentifierStr == "else") 
         return tok_else;
 
-        if (IdentifierStr == "for") {
-
-            printf("for token identified\n");
-            return tok_for; 
-        }
-
+        if (IdentifierStr == "for") 
+        return tok_for; 
 
         if (IdentifierStr == "in") 
         return tok_in;
+
+        if (IdentifierStr == "unary")
+        return tok_unary;
+
+        if (IdentifierStr == "binary")
+        return tok_binary;
         
         return tok_identifier;
     }
@@ -108,6 +112,8 @@ static int CurTok;
 static int getNextToken() {
     return CurTok = getTok();
 }
+
+
 static std::map<char, int> BinOpPrecedence;
 
 static int getTokPrecedence() {
@@ -323,30 +329,33 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 
 
 static std::unique_ptr<SignatureAST> ParseSignature() {
-    if (CurTok != tok_identifier) {
-        fprintf(stderr, "Got %d but were ", CurTok);
-        return LogErrorP("expecting a function name for the signature");
-    }
     std::string fnName = IdentifierStr;
-    getNextToken();
+    switch (CurTok) {
+        default:
+            return LogErrorP("Expected function type for signature");
+        
+        case tok_identifier:
+            getNextToken();
 
-    if (CurTok != '(') {
-        return LogErrorP("Expected ( containing the params for the signature");
+            if (CurTok != '(') {
+                return LogErrorP("Expected ( containing the params for the signature");
+            }
+
+            std::vector<std::string> ArgNames;
+            while (getNextToken() == tok_identifier) {
+
+                ArgNames.push_back(IdentifierStr);
+            }
+
+            if (CurTok != ')') {
+                return LogErrorP("Expected ')' in signature definition");
+            }
+
+            getNextToken(); // eat ")"
+
+            return std::make_unique<SignatureAST>(fnName, std::move(ArgNames));
     }
 
-    std::vector<std::string> ArgNames;
-    while (getNextToken() == tok_identifier) {
-
-        ArgNames.push_back(IdentifierStr);
-    }
-
-    if (CurTok != ')') {
-        return LogErrorP("Expected ')' in signature definition");
-    }
-
-    getNextToken(); // eat ")"
-
-    return std::make_unique<SignatureAST>(fnName, std::move(ArgNames));
 
 }
 

@@ -94,16 +94,23 @@ public:
 class SignatureAST {
     std::string Name;
     std::vector<std::string> Args;
+    bool isOperator;
+    unsigned Precedence;
 
 public:
-    SignatureAST(std::string Name, std::vector<std::string> Args) : Name(Name), Args(std::move(Args)) {}
+    SignatureAST(std::string Name, std::vector<std::string> Args,
+                 bool isOperator = false, unsigned Precedence = 0)
+                : Name(Name), Args(std::move(Args)), isOperator(isOperator), Precedence(Precedence) {}
     const std::string& getName() const { return Name; }
     const int getArgsSize() const { return Args.size(); }
     const std::vector<std::string>& getArgs() const { return Args; }
-
-
-
     llvm::Function *codegen();
+
+    const bool isUnaryOp() const { return isOperator && Args.size()==1; }
+    const bool isBinaryOp() const { return isOperator && Args.size()==2; } 
+
+    const char getOperatorName() const { return Name[Name.size() - 1]; }
+    const unsigned getBinaryPrecedence() const { return Precedence; }
 };
 
 class FunctionAST {
