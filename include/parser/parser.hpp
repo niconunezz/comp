@@ -181,8 +181,10 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
     if (!Cond)
         return nullptr;
     
-    if (CurTok != tok_then)
+    if (CurTok != tok_then) {
+        fprintf(stderr, "Got token %d when", CurTok);
         return LogError("Expected then after condition");
+    }
     
     getNextToken(); // skip then
     auto Then = ParseExpression();
@@ -270,7 +272,6 @@ static std::unique_ptr<ExprAST> parseParenExpr() {
     getNextToken();
     return V;
 }
-
 static std::unique_ptr<ExprAST> ParsePrimary() {
     switch (CurTok) {
     default:
@@ -290,6 +291,20 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
     }
 }
 
+static std::unique_ptr<ExprAST> ParseUnary() {
+    if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+        return ParsePrimary();
+    
+    int Opc = CurTok;
+    getNextToken();
+    if (auto Operand = ParseUnary()) {
+        return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+    }
+    return nullptr;
+}
+
+
+
 std::unique_ptr<ExprAST> ParseExprRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS) {
     while (true) {
         int TokPrec = getTokPrecedence();
@@ -299,7 +314,7 @@ std::unique_ptr<ExprAST> ParseExprRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS
 
         int BinOp = CurTok;
         getNextToken(); // eat binOp
-        auto RHS = ParsePrimary();
+        auto RHS = ParseUnary();
         if (!RHS) {
             return nullptr;
         }
@@ -317,7 +332,7 @@ std::unique_ptr<ExprAST> ParseExprRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS
 }
 
 static std::unique_ptr<ExprAST> ParseExpression() {
-    auto LHS = ParsePrimary();
+    auto LHS = ParseUnary();
     if (!LHS) {
         return nullptr;
     }
@@ -329,33 +344,70 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 
 
 static std::unique_ptr<SignatureAST> ParseSignature() {
-    std::string fnName = IdentifierStr;
+    std::string FnName;
+    unsigned Kind = 0;
+    unsigned BinaryPrecedence = 30;
+
     switch (CurTok) {
+
         default:
             return LogErrorP("Expected function type for signature");
-        
         case tok_identifier:
+            FnName = IdentifierStr;
+            Kind = 0;
+            getNextToken(); // eat func name
+            break;
+        
+        case tok_binary:
             getNextToken();
+            if (!isascii(CurTok))
+                return LogErrorP("Expected binary operator");
 
-            if (CurTok != '(') {
-                return LogErrorP("Expected ( containing the params for the signature");
+            FnName = "binary";
+            FnName += (char)(CurTok);
+            
+            Kind = 2;
+            getNextToken();
+            if (CurTok == tok_number) {
+                if (NumVal < 1 || NumVal > 100) 
+                    return LogErrorP("Invalid precedence value, must be in [1, 100]");
+                BinaryPrecedence = (unsigned)NumVal;
+                getNextToken();
             }
+            break;
+        case tok_unary:
+            getNextToken();
+            if (!isascii(CurTok))
+                return LogErrorP("Expected unary operator");
+            
+            FnName = "unary";
+            FnName += (char)(CurTok);
+            Kind = 1;
+            getNextToken();
+            break;
 
-            std::vector<std::string> ArgNames;
-            while (getNextToken() == tok_identifier) {
-
-                ArgNames.push_back(IdentifierStr);
-            }
-
-            if (CurTok != ')') {
-                return LogErrorP("Expected ')' in signature definition");
-            }
-
-            getNextToken(); // eat ")"
-
-            return std::make_unique<SignatureAST>(fnName, std::move(ArgNames));
+            
+    }
+    if (CurTok != '(') {
+        return LogErrorP("Expected ( containing the params for the signature");
     }
 
+    std::vector<std::string> ArgNames;
+    while (getNextToken() == tok_identifier) {
+
+        ArgNames.push_back(IdentifierStr);
+    }
+
+    if (CurTok != ')') {
+        return LogErrorP("Expected ')' in signature definition");
+    }
+
+    getNextToken(); // eat ")"
+
+    if (Kind && ArgNames.size() != Kind)
+        return LogErrorP("Invalid number of operands for operator type");
+
+    return std::make_unique<SignatureAST>(FnName, std::move(ArgNames), Kind != 0, BinaryPrecedence);
 
 }
 

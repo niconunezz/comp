@@ -67,6 +67,11 @@ extern "C" DLLEXPORT double putchard(double X) {
   return 0;
 }
 
+extern "C" DLLEXPORT double printd(double X) {
+  printf("%f\n", X);
+  return 0;
+}
+
 extern "C" DLLEXPORT double printstar(double n) {
     std::string out = "\n";
     for (unsigned i = 0; i < n; i++) 
@@ -161,13 +166,25 @@ Value* BinaryExprAST::codegen() {
         case '<':
             L = Builder->CreateFCmpULT(L, R, "lttmp");
             return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
-        case '~':
-            L = Builder->CreateFCmpOEQ(L, R, "eqtmp");
-            return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
         default:
-            return LogErrorV("invalid binop operator");
+            break;
         }
 
+        Function* F = getFunction(std::string("binary") + Op);
+        assert(F && "binary operator not found!");
+        Value* Ops[2] = {L, R};
+        return Builder->CreateCall(F, Ops, "binop");
+
+}
+
+Value* UnaryExprAST::codegen() {
+    Value* OperandV = Operand->codegen();
+    if (!OperandV)
+        return nullptr;
+
+    Function* F = getFunction(std::string("unary") + Opcode);
+    assert(F && "unary operator not found!");
+    return Builder->CreateCall(F, OperandV, "unaryop");
 }
 
 Value* CallExprAST::codegen() {
@@ -211,8 +228,9 @@ Function *FunctionAST::codegen() {
         FunctionProtos[signature->getName()] = std::move(signature);
         Function *TheFunction = getFunction(P.getName());
         
-        // if (!TheFunction)
-        //     return nullptr;
+        if (P.isBinaryOp()) {
+            BinOpPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
+        }
             
         if (TheFunction) {
             LLVM_DEBUG(dbgs() << "found function!" << "\n");
